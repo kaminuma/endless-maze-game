@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>エンドレスメイズランナー</title>
+    <style>
+      canvas {
+        border: 1px solid black;
+        display: block;
+        margin: 20px auto;
+        background-color: #000;
+      }
+      body {
+        text-align: center;
+        font-family: Arial, sans-serif;
+      }
+      #gameOverScreen,
+      #levelCompleteScreen {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.8);
+        color: white;
+        display: none;
+        justify-content: center;
+        align-items: center;
+        flex-direction: column;
+        font-size: 2em;
+      }
+      button {
+        padding: 10px 20px;
+        font-size: 1em;
+        cursor: pointer;
+        margin-top: 20px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>エンドレスメイズランナー</h1>
+    <canvas id="mazeCanvas" width="700" height="900"></canvas>
+    <div id="gameOverScreen">
+      <p>ゲームオーバー</p>
+      <button onclick="restartGame()">リスタート</button>
+      <button onclick="endGame()">終了</button>
+    </div>
+    <div id="levelCompleteScreen">
+      <p>レベルクリア！</p>
+      <button onclick="nextLevel()">次のレベル</button>
+      <button onclick="endGame()">終了</button>
+    </div>
+    <audio id="backgroundMusic" src="music.mp3" loop></audio>
+    <script>
+      const canvas = document.getElementById("mazeCanvas");
+      const ctx = canvas.getContext("2d");
+
+      const cellSize = 25; // 各セルのサイズ
+      const cols = Math.floor(canvas.width / cellSize);
+      const rows = Math.floor(canvas.height / cellSize);
+
+      let maze = [];
+      let player = {
+        x: Math.floor(cols / 2),
+        y: rows - 2, // スタート位置
+        width: cellSize * 0.8,
+        height: cellSize * 0.8,
+      };
+
+      let enemies = [];
+      let level = 1;
+      let maxLevel = 50;
+      let scrollSpeed = 1; // スクロール速度
+      let gameOver = false;
+      let levelComplete = false;
+      let keysPressed = {};
+      let timeSurvived = 0;
+      const levelDuration = 20; // 各レベルの時間（秒）
+      let scrollOffset = 0;
+
+      // キーボード入力の処理（斜め移動対応、一回の入力で一マス移動）
+      let canMove = true;
+
+      document.addEventListener("keydown", function (e) {
+        e.preventDefault(); // デフォルトの動作を防止
+        keysPressed[e.key] = true;
+        updatePlayer();
+      });
+
+      document.addEventListener("keyup", function (e) {
+        keysPressed[e.key] = false;
+        canMove = true; // キーが離されたら再度移動可能に
+      });
+
+      // プレイヤーの位置を更新
+      function updatePlayer() {
+        if (gameOver || levelComplete) return;
+        if (!canMove) return;
+
+        let dx = 0;
+        let dy = 0;
+
+        if (keysPressed["ArrowLeft"] || keysPressed["a"]) {
+          dx -= 1;
+        }
+        if (keysPressed["ArrowRight"] || keysPressed["d"]) {
+          dx += 1;
+        }
+        if (keysPressed["ArrowUp"] || keysPressed["w"]) {
+          dy -= 1;
+        }
+        if (keysPressed["ArrowDown"] || keysPressed["s"]) {
+          dy += 1;
+        }
+
+        if (dx !== 0 || dy !== 0) {
+          let newX = player.x + dx;
+          let newY = player.y + dy;
+
+          // 境界チェック
+          newX = Math.max(0, Math.min(cols - 1, newX));
+          newY = Math.max(0, Math.min(rows - 1, newY));
+
+          // 壁の衝突チェック
+          if (maze[newY][newX] === 0) {
+            player.x = newX;
+            player.y = newY;
+          }
+
+          canMove = false; // 移動後は一時的に移動を禁止
+        }
+      }
+
+      // 迷路の初期化
+      function initializeMaze() {
+        maze = [];
+        for (let i = 0; i < rows; i++) {
+          maze.push(Array(cols).fill(1)); // 全て壁で初期化
+        }
+
+        // スタートからゴールまでのパスを生成
+        let x = Math.floor(cols / 2);
+        for (let y = rows - 1; y >= 0; y--) {
+          maze[y][x] = 0; // パスを作成
+          // 左右にランダムに移動
+          let dir = Math.floor(Math.random() * 3) - 1; // -1, 0, 1
+          x += dir;
+          x = Math.max(1, Math.min(cols - 2, x)); // 境界内に維持
+        }
+
+        // 残りの迷路を生成
+        for (let y = 1; y < rows; y++) {
+          generateRow(y);
+        }
+
+        // プレイヤーの初期位置を通路上に設定
+        setPlayerStartPosition();
+      }
+
+      // プレイヤーの初期位置を設定
+      function setPlayerStartPosition() {
+        // 迷路の最下段で通路になっているセルを探す
+        let possiblePositions = [];
+        for (let x = 1; x < cols - 1; x++) {
+          if (maze[rows - 2][x] === 0) {
+            possiblePositions.push(x);
+          }
+        }
+
+        // 通路が見つからない場合、中央に設定
+        if (possiblePositions.length === 0) {
+          player.x = Math.floor(cols / 2);
+          player.y = rows - 2;
+          maze[player.y][player.x] = 0;
+        } else {
+          // ランダムに初期位置を設定
+          player.x =
+            possiblePositions[
+              Math.floor(Math.random() * possiblePositions.length)
+            ];
+          player.y = rows - 2;
+        }
+      }
+
+      // 新しい行を生成し、接続性を保証
+      function generateRow(rowIndex) {
+        if (rowIndex === 0) return; // 最初の行はスキップ
+
+        const previousRow = maze[rowIndex - 1];
+        const currentRow = maze[rowIndex];
+
+        for (let col = 1; col < cols - 1; col++) {
+          // 上のセルが通路なら高確率で通路にする
+          if (previousRow[col] === 0) {
+            currentRow[col] = Math.random() > 0.2 ? 0 : 1;
+          } else {
+            // 上のセルが壁なら低確率で通路を作成
+            currentRow[col] = Math.random() > 0.8 ? 0 : 1;
+          }
+        }
+
+        // 少なくとも一つの通路が続くようにする
+        if (!currentRow.includes(0)) {
+          const possibleCols = [];
+          for (let col = 1; col < cols - 1; col++) {
+            if (previousRow[col] === 0) possibleCols.push(col);
+          }
+          if (possibleCols.length > 0) {
+            const randCol =
+              possibleCols[Math.floor(Math.random() * possibleCols.length)];
+            currentRow[randCol] = 0;
+          } else {
+            const randCol = Math.floor(Math.random() * (cols - 2)) + 1;
+            currentRow[randCol] = 0;
+          }
+        }
+      }
+
+      // 迷路、プレイヤー、敵を描画
+      function drawMaze() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        // 迷路の描画
+        for (let y = 0; y < rows; y++) {
+          for (let x = 0; x < cols; x++) {
+            ctx.fillStyle = maze[y][x] === 1 ? "black" : "white";
+            ctx.fillRect(
+              x * cellSize,
+              y * cellSize - scrollOffset,
+              cellSize,
+              cellSize
+            );
+          }
+        }
+
+        // プレイヤーの描画
+        ctx.fillStyle = "blue";
+        ctx.fillRect(
+          player.x * cellSize + (cellSize - player.width) / 2,
+          player.y * cellSize + (cellSize - player.height) / 2 - scrollOffset,
+          player.width,
+          player.height
+        );
+
+        // 敵の描画
+        ctx.fillStyle = "red";
+        enemies.forEach((enemy) => {
+          ctx.fillRect(
+            enemy.x * cellSize + (cellSize - enemy.width) / 2,
+            enemy.y * cellSize + (cellSize - enemy.height) / 2 - scrollOffset,
+            enemy.width,
+            enemy.height
+          );
+        });
+
+        // レベルと時間の表示
+        ctx.fillStyle = "white";
+        ctx.font = "16px Arial";
+        ctx.fillText(`レベル: ${level}`, 10, 20);
+        ctx.fillText(`時間: ${Math.floor(timeSurvived)}秒`, 10, 40);
+      }
+
+      // 迷路を上にスクロール
+      function scrollMaze() {
+        scrollOffset += scrollSpeed;
+        if (scrollOffset >= cellSize) {
+          scrollOffset -= cellSize;
+          maze.shift(); // 上の行を削除
+          const newRow = Array(cols).fill(1);
+          maze.push(newRow); // 新しい下の行を追加
+          generateRow(rows - 1); // 新しい下の行を生成
+
+          // プレイヤーの位置を調整
+          player.y -= 1;
+
+          // プレイヤーが迷路の外に出ないようにする
+          if (player.y < 0 || maze[player.y][player.x] === 1) {
+            gameOver = true;
+            showGameOver();
+          }
+
+          // 敵を上に移動
+          enemies.forEach((enemy) => {
+            enemy.y -= 1;
+          });
+
+          // 画面外の敵を削除
+          enemies = enemies.filter((enemy) => enemy.y >= 0);
+
+          // レベルに応じて新しい敵を生成
+          spawnEnemies();
+        }
+      }
+
+      // レベルに応じた敵の生成
+      function spawnEnemies() {
+        // レベル5から敵を出現
+        if (level < 5) return;
+
+        // レベルに基づいた敵の数
+        const enemyCount = Math.min(Math.floor((level - 4) / 3) + 1, 10); // 最大10体
+        for (let i = 0; i < enemyCount; i++) {
+          const x = Math.floor(Math.random() * (cols - 2)) + 1;
+          const y = rows - 2;
+          if (
+            maze[y][x] === 0 &&
+            !enemies.some((e) => e.x === x && e.y === y)
+          ) {
+            enemies.push({
+              x: x,
+              y: y,
+              width: cellSize * 0.8,
+              height: cellSize * 0.8,
+            });
+          }
+        }
+      }
+
+      // 敵の位置を更新
+      function updateEnemies() {
+        enemies.forEach((enemy) => {
+          if (Math.random() > 0.7) {
+            let dir = Math.floor(Math.random() * 4); // 0: 上, 1: 下, 2: 左, 3: 右
+            let newX = enemy.x;
+            let newY = enemy.y;
+
+            if (dir === 0) newY -= 1;
+            if (dir === 1) newY += 1;
+            if (dir === 2) newX -= 1;
+            if (dir === 3) newX += 1;
+
+            // 境界チェック
+            newX = Math.max(0, Math.min(cols - 1, newX));
+            newY = Math.max(0, Math.min(rows - 1, newY));
+
+            // 壁との衝突チェック
+            if (
+              maze[newY][newX] === 0 &&
+              !enemies.some((e) => e.x === newX && e.y === newY)
+            ) {
+              enemy.x = newX;
+              enemy.y = newY;
+            }
+          }
+        });
+      }
+
+      // ゲームの状態を更新
+      function updateGame() {
+        if (gameOver || levelComplete) return;
+
+        scrollMaze();
+        updateEnemies();
+
+        // 敵との衝突チェック
+        enemies.forEach((enemy) => {
+          if (enemy.x === player.x && enemy.y === player.y) {
+            gameOver = true;
+            showGameOver();
+          }
+        });
+
+        // 生存時間を更新
+        timeSurvived += 1 / 60; // 60FPSを想定
+        if (timeSurvived >= levelDuration) {
+          levelComplete = true;
+          showLevelComplete();
+        }
+      }
+
+      // ゲームループ
+      function gameLoop() {
+        updateGame();
+        drawMaze();
+        if (!gameOver && !levelComplete) {
+          requestAnimationFrame(gameLoop);
+        }
+      }
+
+      // ゲームを開始
+      function startGame() {
+        initializeMaze();
+        enemies = [];
+        timeSurvived = 0;
+        scrollOffset = 0;
+        gameOver = false;
+        levelComplete = false;
+        canMove = true;
+        scrollSpeed = 1 + (level - 1) * 0.05; // レベルに応じてスクロール速度を増加
+        document.getElementById("gameOverScreen").style.display = "none";
+        document.getElementById("levelCompleteScreen").style.display = "none";
+        const music = document.getElementById("backgroundMusic");
+        music.play();
+        gameLoop();
+      }
+
+      // ゲームオーバー画面を表示
+      function showGameOver() {
+        document.getElementById("gameOverScreen").style.display = "flex";
+        const music = document.getElementById("backgroundMusic");
+        music.pause();
+      }
+
+      // レベルクリア画面を表示
+      function showLevelComplete() {
+        document.getElementById("levelCompleteScreen").style.display = "flex";
+        const music = document.getElementById("backgroundMusic");
+        music.pause();
+      }
+
+      // ゲームをリスタート
+      function restartGame() {
+        // 現在のレベルから再開
+        startGame();
+      }
+
+      // ゲームを終了
+      function endGame() {
+        // メインページに遷移
+        window.location.href = "index.html";
+      }
+
+      // 次のレベルに進む
+      function nextLevel() {
+        if (level < maxLevel) {
+          level += 1;
+          startGame();
+        } else {
+          alert("おめでとうございます！全てのレベルをクリアしました！");
+          endGame();
+        }
+      }
+
+      // ページ読み込み時にゲームを開始
+      window.onload = function () {
+        startGame();
+      };
+    </script>
+  </body>
+</html>
