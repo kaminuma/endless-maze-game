@@ -2,14 +2,26 @@
 <html>
   <head>
     <title>エンドレスメイズランナー - 説明</title>
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, user-scalable=no"
+    />
     <style>
       body {
         font-family: Arial, sans-serif;
         text-align: center;
-        margin: 20px;
+        margin: 0;
+        padding: 20px;
+        overflow-x: hidden;
       }
       h1 {
         font-size: 2em;
+        margin-top: 20px;
+      }
+      p {
+        font-size: 1.2em;
+        line-height: 1.5;
+        margin: 20px 0;
       }
       button {
         padding: 15px 30px;
@@ -18,8 +30,12 @@
         cursor: pointer;
       }
       ul {
-        list-style: none; /* リストの●を削除 */
-        padding: 0; /* 不要な余白を削除 */
+        list-style: none;
+        padding: 0;
+        font-size: 1.2em;
+      }
+      ul li {
+        margin: 10px 0;
       }
       .credits {
         margin-top: 30px;
@@ -32,6 +48,20 @@
       }
       .credits a:hover {
         text-decoration: underline;
+      }
+      /* レスポンシブ対応 */
+      @media screen and (max-width: 768px) {
+        h1 {
+          font-size: 1.5em;
+        }
+        p,
+        ul,
+        button {
+          font-size: 1em;
+        }
+        button {
+          padding: 12px 24px;
+        }
       }
     </style>
   </head>
@@ -48,6 +78,7 @@
     <p>以下の操作でプレイできます:</p>
     <ul>
       <li>矢印キー または WASDキーで移動</li>
+      <li>画面下部のボタンをタップして移動</li>
     </ul>
     <p>ゲーム中に音楽が流れるので、音量に注意してください。</p>
     <button onclick="startGame()">ゲームを遊ぶ</button>
@@ -59,7 +90,7 @@
         『<a
           href="https://iwashiro-sounds.work/#google_vignette"
           target="_blank"
-          >イワシロ音楽素材様/a
+          >イワシロ音楽素材様</a
         >』
       </p>
       <p>楽曲: 夜な夜な吠える時</p>
