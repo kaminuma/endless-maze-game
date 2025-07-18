@@ -150,6 +150,8 @@
 
       // キーボード入力の処理（斜め移動対応、一回の入力で一マス移動）
       let canMove = true;
+      let moveCooldown = 0;
+      const MOVE_COOLDOWN_FRAMES = 6; // 連続移動の間隔（小さいほど速い）
 
       // スマホ操作用のボタン取得
       const upButton = document.getElementById("upButton");
@@ -163,22 +165,18 @@
         upButton.addEventListener(eventType, function (e) {
           e.preventDefault();
           keysPressed["up"] = true;
-          updatePlayer();
         });
         downButton.addEventListener(eventType, function (e) {
           e.preventDefault();
           keysPressed["down"] = true;
-          updatePlayer();
         });
         leftButton.addEventListener(eventType, function (e) {
           e.preventDefault();
           keysPressed["left"] = true;
-          updatePlayer();
         });
         rightButton.addEventListener(eventType, function (e) {
           e.preventDefault();
           keysPressed["right"] = true;
-          updatePlayer();
         });
       });
 
@@ -187,22 +185,18 @@
         upButton.addEventListener(eventType, function (e) {
           e.preventDefault();
           keysPressed["up"] = false;
-          canMove = true;
         });
         downButton.addEventListener(eventType, function (e) {
           e.preventDefault();
           keysPressed["down"] = false;
-          canMove = true;
         });
         leftButton.addEventListener(eventType, function (e) {
           e.preventDefault();
           keysPressed["left"] = false;
-          canMove = true;
         });
         rightButton.addEventListener(eventType, function (e) {
           e.preventDefault();
           keysPressed["right"] = false;
-          canMove = true;
         });
       });
 
@@ -210,18 +204,19 @@
       document.addEventListener("keydown", function (e) {
         e.preventDefault(); // デフォルトの動作を防止
         keysPressed[e.key] = true;
-        updatePlayer();
       });
 
       document.addEventListener("keyup", function (e) {
         keysPressed[e.key] = false;
-        canMove = true; // キーが離されたら再度移動可能に
       });
 
-      // プレイヤーの位置を更新
+      // プレイヤーの位置を更新（連続移動対応）
       function updatePlayer() {
         if (gameOver || levelComplete) return;
-        if (!canMove) return;
+        if (moveCooldown > 0) {
+          moveCooldown--;
+          return;
+        }
 
         let dx = 0;
         let dy = 0;
@@ -263,9 +258,8 @@
           if (maze[newY] && maze[newY][newX] === 0) {
             player.x = newX;
             player.y = newY;
+            moveCooldown = MOVE_COOLDOWN_FRAMES;
           }
-
-          canMove = false; // 移動後は一時的に移動を禁止
         }
       }
 
@@ -352,15 +346,16 @@
           setCells[sets[x]].push(x);
         }
 
+        // 各セットごとに必ず1つは下に通路を伸ばす
         for (let s in setCells) {
           let cells = setCells[s];
-          let count = 0;
+          // ランダムに1つ選ぶ
+          let mustDown = cells[Math.floor(Math.random() * cells.length)];
           cells.forEach((x) => {
-            if (Math.random() > 0.5 || count === 0) {
+            if (x === mustDown || Math.random() > 0.5) {
               maze[y + 1] = maze[y + 1] || [];
               maze[y + 1][x] = 0;
               newSets[x] = sets[x];
-              count++;
             } else {
               maze[y + 1] = maze[y + 1] || [];
               maze[y + 1][x] = 1;
@@ -570,7 +565,7 @@
 
       // ゲームループ
       function gameLoop() {
-        updatePlayer(); // プレイヤーの移動を更新
+        updatePlayer(); // プレイヤーの移動を更新（連続移動対応）
         updateGame();
         drawMaze();
         if (!gameOver && !levelComplete) {
